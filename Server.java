@@ -1,22 +1,101 @@
+import javax.swing.*;
+import javax.swing.text.DefaultCaret;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.*;
 import java.net.*;
-import java.util.*;
+import java.util.HashSet;
 
 public class Server {
     private static final int PORT = 5050;
     private static HashSet<PrintWriter> clientWriters = new HashSet<>();
+    private JTextArea messageArea;
+    private static JPanel messagePanel;
+    private JTextField inputField;
+    private DefaultListModel<String> userListModel;
+    private PrintWriter out;
+    private ServerSocket serverSocket;
 
     public static void main(String[] args) {
-        System.out.println("Chat server starting...");
-        try(ServerSocket serverSocket = new ServerSocket(PORT)) {
-            System.out.println("Chat server started on port " + PORT);
-            while(true) {
-                new ClientHandler(serverSocket.accept()).start();
+        SwingUtilities.invokeLater(() -> {
+            new Server().createUI();
+        });
+
+    }
+
+    private void createUI() {
+        JFrame frame = new JFrame("Server");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(800,600);
+        frame.setLayout(new BorderLayout());
+
+        //message area
+        // Message panel in the center
+        messagePanel = new JPanel();
+        messagePanel.setLayout(new BoxLayout(messagePanel, BoxLayout.Y_AXIS));
+        JScrollPane messageScrollPane = new JScrollPane(messagePanel);
+        messageScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+
+        frame.add(messageScrollPane, BorderLayout.CENTER);
+
+        //message input field
+        inputField = new JTextField();
+        inputField.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                sendMessage();
             }
-        } catch(IOException e) {
-            System.err.println("Could not start server: " + e.getMessage());
-            e.printStackTrace();
+        });
+        frame.add(inputField, BorderLayout.SOUTH);
+
+        frame.setVisible(true);
+
+        startServer();
+
+    }
+
+    private void sendMessage() {
+        String message = inputField.getText().trim();
+        if (!message.isEmpty()) {
+            // Append the message to the messagePanel
+            addMessageToPanel("Server: " + message);
+            // Send the message to all clients
+            synchronized (clientWriters) {
+                for (PrintWriter writer : clientWriters) {
+                    writer.println("Server: " + message);
+                }
+            }
+            inputField.setText("");
         }
+    }
+
+    //function to start the server
+    private void startServer() {
+        try {
+            serverSocket = new ServerSocket(5050);
+            String hostAddress = InetAddress.getLocalHost().getHostAddress();
+            System.out.println("Starting server on address " + hostAddress + ":" + PORT);
+
+            new Thread(() -> {
+                while (true) {
+                    try {
+                        new ClientHandler(serverSocket.accept()).start();;
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }).start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }     
+    }
+
+    private static void addMessageToPanel(String message) {
+        JLabel messageLabel = new JLabel(message);
+        messagePanel.add(messageLabel);
+        messagePanel.revalidate();
+        JScrollBar verticalScrollBar = ((JScrollPane) messagePanel.getParent().getParent()).getVerticalScrollBar();
+        verticalScrollBar.setValue(verticalScrollBar.getMaximum());
     }
 
     private static class ClientHandler extends Thread {
@@ -38,12 +117,13 @@ public class Server {
                     clientWriters.add(out);
                 }
 
-                String message;
-                while ((message = in.readLine()) != null) {
-                    System.out.println("Recceived: " + message);
-                    for(PrintWriter writer : clientWriters) {
-                        writer.println(message);
+                while(true) {
+                    String message = in.readLine();
+                    if(message == null) {
+                        break;
                     }
+                    System.out.println("Recceived: " + message);
+                    SwingUtilities.invokeLater(() -> addMessageToPanel(message));
                 }
             } catch(IOException e) {
                 System.err.println("Error handling client: " + e.getMessage());
