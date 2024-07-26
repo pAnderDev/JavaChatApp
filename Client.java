@@ -1,23 +1,23 @@
 import javax.swing.*;
 import javax.swing.text.DefaultCaret;
-
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.*;
 import java.net.*;
-import java.util.HashSet;
-import java.util.Scanner;
 
-public class Client  {
+public class Client {
 
-    private JTextArea messageArea;
     private static JPanel messagePanel;
     private JTextField inputField;
     private DefaultListModel<String> userListModel;
-    private static HashSet<PrintWriter> serverWriters = new HashSet<>();
     private PrintWriter out;
     private Socket socket;
+    private String username;
+    private static final int PORT = 5050;
+    private static final int RECONNECT_INTERVAL = 5000; // 5 seconds
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
@@ -28,10 +28,10 @@ public class Client  {
     private void createUI() {
         JFrame frame = new JFrame("Client");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(800,600);
+        frame.setSize(800, 600);
         frame.setLayout(new BorderLayout());
 
-        //message area
+        // Message area
         messagePanel = new JPanel();
         messagePanel.setLayout(new BoxLayout(messagePanel, BoxLayout.Y_AXIS));
         JScrollPane messageScrollPane = new JScrollPane(messagePanel);
@@ -39,7 +39,7 @@ public class Client  {
 
         frame.add(messageScrollPane, BorderLayout.CENTER);
 
-        //message input field
+        // Message input field
         inputField = new JTextField();
         inputField.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -48,32 +48,74 @@ public class Client  {
         });
         frame.add(inputField, BorderLayout.SOUTH);
 
+        // User list on the side
+        userListModel = new DefaultListModel<>();
+        JList<String> userList = new JList<>(userListModel);
+        JScrollPane userScrollPane = new JScrollPane(userList);
+        userScrollPane.setPreferredSize(new Dimension(150, 0));
+        frame.add(userScrollPane, BorderLayout.WEST);
+
+        frame.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                stop();
+            }
+        });
+
         frame.setVisible(true);
+
+        // Prompt for username
+        username = JOptionPane.showInputDialog(frame, "Enter your username:", "Username", JOptionPane.PLAIN_MESSAGE);
+
+        if (username == null || username.trim().isEmpty()) {
+            username = "Anonymous";
+        }
+
+        updateUserList(username);
 
         connectToServer();
     }
 
     private void connectToServer() {
-        try {
-            String serverAddress = "localhost"; //change for each new server starting location
-            int serverPORT = 5050;
-            socket = new Socket(serverAddress, serverPORT);
-            out = new PrintWriter(socket.getOutputStream(), true);
+        new Thread(() -> {
+            while (true) {
+                try {
+                    String serverAddress = "localhost"; // Change for each new server starting location
+                    socket = new Socket(serverAddress, PORT);
+                    out = new PrintWriter(socket.getOutputStream(), true);
 
-            new Thread(new RecievedMessageHandler(socket)).start();
-        } catch(Exception e) {
-            e.printStackTrace();
-        }
+                    // Send username to the server
+                    out.println("USERNAME: " + username);
+
+                    new Thread(new ReceivedMessageHandler(socket)).start();
+                    break; // Successfully connected, exit the loop
+
+                } catch (IOException e) {
+                    System.out.println("Failed to connect to the server. Retrying in " + RECONNECT_INTERVAL / 1000 + " seconds...");
+                    try {
+                        Thread.sleep(RECONNECT_INTERVAL);
+                    } catch (InterruptedException ie) {
+                        ie.printStackTrace();
+                    }
+                }
+            }
+        }).start();
     }
 
     private void sendMessage() {
         String message = inputField.getText().trim();
         if (!message.isEmpty()) {
             // Append the message to the messagePanel
-            addMessageToPanel("Client: " + message);
-            // Send the message to all clients
-            out.println("Client: " + message);
+            addMessageToPanel("Me: " + message);
+            // Send the message to the server
+            out.println(username + ": " + message);
             inputField.setText("");
+        }
+    }
+
+    private void updateUserList(String user) {
+        if (!userListModel.contains(user)) {
+            userListModel.addElement(user);
         }
     }
 
@@ -85,27 +127,33 @@ public class Client  {
         verticalScrollBar.setValue(verticalScrollBar.getMaximum());
     }
 
-    private class RecievedMessageHandler implements Runnable {
+    private class ReceivedMessageHandler implements Runnable {
         private Socket socket;
 
-        public RecievedMessageHandler(Socket socket) {
+        public ReceivedMessageHandler(Socket socket) {
             this.socket = socket;
-
         }
 
         public void run() {
-            try(BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
-                while(true) {
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+                while (true) {
                     String message = in.readLine();
-                    if(message == null) {
+                    if (message == null) {
                         break;
                     }
-                    System.out.println("Recceived: " + message);
-                    SwingUtilities.invokeLater(() -> addMessageToPanel(message));
+                    System.out.println("Received: " + message);
+                    SwingUtilities.invokeLater(() -> {
+                        if (message.startsWith("USER:")) {
+                            updateUserList(message.substring(5));
+                        } else {
+                            addMessageToPanel(message);
+                        }
+                    });
                 }
-            } catch(IOException e) {
+            } catch (IOException e) {
                 e.printStackTrace();
-            } 
+                connectToServer(); // Reconnect if connection is lost
+            }
         }
 
         private void stop() {
@@ -115,6 +163,15 @@ public class Client  {
                 e.printStackTrace();
             }
         }
-        
+    }
+
+    private void stop() {
+        try {
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }

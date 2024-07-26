@@ -3,6 +3,8 @@ import javax.swing.text.DefaultCaret;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.*;
 import java.net.*;
 import java.util.HashSet;
@@ -13,9 +15,10 @@ public class Server {
     private JTextArea messageArea;
     private static JPanel messagePanel;
     private JTextField inputField;
-    private DefaultListModel<String> userListModel;
+    private static DefaultListModel<String> userListModel;
     private PrintWriter out;
     private ServerSocket serverSocket;
+    private static String username;
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
@@ -48,7 +51,29 @@ public class Server {
         });
         frame.add(inputField, BorderLayout.SOUTH);
 
+        userListModel = new DefaultListModel<>();
+        JList<String> userList = new JList<>(userListModel);
+        JScrollPane userScrollPane = new JScrollPane(userList);
+        userScrollPane.setPreferredSize(new Dimension(150, 0));
+        frame.add(userScrollPane, BorderLayout.WEST);
+
+        frame.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                stop();
+            }
+        });
+
         frame.setVisible(true);
+
+         // Prompt for username
+         username = JOptionPane.showInputDialog(frame, "Enter your username:", "Username", JOptionPane.PLAIN_MESSAGE);
+
+         if (username == null || username.trim().isEmpty()) {
+             username = "Anonymous";
+         }
+
+        updateUserList(username);
 
         startServer();
 
@@ -58,14 +83,26 @@ public class Server {
         String message = inputField.getText().trim();
         if (!message.isEmpty()) {
             // Append the message to the messagePanel
-            addMessageToPanel("Server: " + message);
+            addMessageToPanel("Me: " + message);
             // Send the message to all clients
             synchronized (clientWriters) {
                 for (PrintWriter writer : clientWriters) {
-                    writer.println("Server: " + message);
+                    writer.println(username + ": " + message);
                 }
             }
             inputField.setText("");
+        }
+    }
+
+    private static void updateUserList(String user) {
+        if (!userListModel.contains(user)) {
+            userListModel.addElement(user);
+        }
+    }
+
+    private static void removeUserFromList(String user) {
+        if(userListModel.contains(user)) {
+            userListModel.removeElement(user);
         }
     }
 
@@ -98,10 +135,21 @@ public class Server {
         verticalScrollBar.setValue(verticalScrollBar.getMaximum());
     }
 
+    private void stop() {
+        try {
+            if (serverSocket != null && !serverSocket.isClosed()) {
+                serverSocket.close();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     private static class ClientHandler extends Thread {
         private Socket socket;
         private PrintWriter out;
         private BufferedReader in;
+        private String clientUsername;
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
@@ -115,6 +163,13 @@ public class Server {
                 out = new PrintWriter(socket.getOutputStream(), true);
                 synchronized (clientWriters) {
                     clientWriters.add(out);
+                     // Get username
+                    clientUsername = in.readLine();
+                    if (clientUsername != null && clientUsername.startsWith("USERNAME:")) {
+                    clientUsername = clientUsername.substring(9);
+                    out.println("USER:" + username); // Send server username to the client
+                    SwingUtilities.invokeLater(() -> updateUserList(clientUsername)); // Update user list with client username
+                }
                 }
 
                 while(true) {
@@ -139,7 +194,10 @@ public class Server {
                 synchronized(clientWriters) {
                     clientWriters.remove(out);
                 }
+                SwingUtilities.invokeLater(() -> removeUserFromList(clientUsername));
             }
         }
     }
+
+    
 }
