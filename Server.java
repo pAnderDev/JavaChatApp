@@ -20,13 +20,18 @@ public class Server {
     private static String username;
 
     public static void main(String[] args) {
+        if(args.length != 1) {
+            System.out.println("Usage: java Server <IP Address>");
+            System.exit(1);
+        }
+        String bindAddress = args[0];
         SwingUtilities.invokeLater(() -> {
-            new Server().createUI();
+            new Server().createUI(bindAddress);
         });
 
     }
 
-    private void createUI() {
+    private void createUI(String bindAddress) {
         JFrame frame = new JFrame("Server");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(800,600);
@@ -74,7 +79,7 @@ public class Server {
 
         updateUserList(username);
 
-        startServer();
+        startServer(bindAddress);
 
     }
 
@@ -106,14 +111,13 @@ public class Server {
     }
 
     //function to start the server
-    private void startServer() {
+    private void startServer(String bindAddress) {
         try {
-            serverSocket = new ServerSocket(5050);
-            String hostAddress = InetAddress.getLocalHost().getHostAddress();
-            System.out.println("Starting server on address " + hostAddress + ":" + PORT);
+            serverSocket = new ServerSocket(PORT, 50, InetAddress.getByName(bindAddress));
+            System.out.println("Starting server on address " + bindAddress + ":" + PORT);
 
             //store the ip address into the system properties
-            storeIPAddress(hostAddress);
+            storeIPAddress(bindAddress);
 
             new Thread(() -> {
                 while (true) {
