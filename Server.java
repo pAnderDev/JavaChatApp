@@ -1,5 +1,4 @@
 import javax.swing.*;
-import javax.swing.text.DefaultCaret;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -7,16 +6,16 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.*;
 import java.net.*;
+import java.security.Permissions;
 import java.util.HashSet;
+import java.util.Properties;
 
 public class Server {
     private static final int PORT = 5050;
     private static HashSet<PrintWriter> clientWriters = new HashSet<>();
-    private JTextArea messageArea;
     private static JPanel messagePanel;
     private JTextField inputField;
     private static DefaultListModel<String> userListModel;
-    private PrintWriter out;
     private ServerSocket serverSocket;
     private static String username;
 
@@ -113,6 +112,9 @@ public class Server {
             String hostAddress = InetAddress.getLocalHost().getHostAddress();
             System.out.println("Starting server on address " + hostAddress + ":" + PORT);
 
+            //store the ip address into the system properties
+            storeIPAddress(hostAddress);
+
             new Thread(() -> {
                 while (true) {
                     try {
@@ -125,6 +127,18 @@ public class Server {
         } catch (IOException e) {
             e.printStackTrace();
         }     
+    }
+
+    private void storeIPAddress(String ipAddress) {
+        Properties p = new Properties(System.getProperties());
+        p.setProperty("ip.address", ipAddress);
+        try {
+            FileOutputStream fos = new FileOutputStream("system.properties");
+            p.store(fos, "System Properties");
+            System.setProperties(p);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private static void addMessageToPanel(String message) {

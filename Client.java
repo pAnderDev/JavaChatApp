@@ -1,5 +1,4 @@
 import javax.swing.*;
-import javax.swing.text.DefaultCaret;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -7,6 +6,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.*;
 import java.net.*;
+import java.util.Properties;
 
 public class Client {
 
@@ -80,7 +80,7 @@ public class Client {
         new Thread(() -> {
             while (true) {
                 try {
-                    String serverAddress = "localhost"; // Change for each new server starting location
+                    String serverAddress = getServerAddress(); // Change for each new server starting location
                     socket = new Socket(serverAddress, PORT);
                     out = new PrintWriter(socket.getOutputStream(), true);
 
@@ -100,6 +100,18 @@ public class Client {
                 }
             }
         }).start();
+    }
+
+    private String getServerAddress() {
+        Properties p = new Properties(System.getProperties());
+        try {
+            FileInputStream fis = new FileInputStream("system.properties");
+            p.load(fis);
+            return p.getProperty("ip.address");
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "localhost"; //default to local host if porperties file fails 
+        }
     }
 
     private void sendMessage() {
@@ -153,14 +165,6 @@ public class Client {
             } catch (IOException e) {
                 e.printStackTrace();
                 connectToServer(); // Reconnect if connection is lost
-            }
-        }
-
-        private void stop() {
-            try {
-                socket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
             }
         }
     }

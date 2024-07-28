@@ -15,3 +15,6 @@
 *.zip
 *.tar.gz
 *.rar
+
+# System Properties 
+.properties
