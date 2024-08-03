@@ -16,10 +16,16 @@ public class Client {
     private PrintWriter out;
     private Socket socket;
     private String username;
+    private static String serverAddress;
     private static final int PORT = 5050;
     private static final int RECONNECT_INTERVAL = 5000; // 5 seconds
 
     public static void main(String[] args) {
+        if(args.length != 1) {
+            System.out.println("Usage: java Client <Destination IP Address>");
+            System.exit(1);
+        }
+        serverAddress = args[0];
         SwingUtilities.invokeLater(() -> {
             new Client().createUI();
         });
@@ -73,14 +79,14 @@ public class Client {
 
         updateUserList(username);
 
-        connectToServer();
+        connectToServer(serverAddress);
+
     }
 
-    private void connectToServer() {
+    private void connectToServer(String serverAddress) {
         new Thread(() -> {
             while (true) {
                 try {
-                    String serverAddress = getServerAddress(); // Change for each new server starting location
                     socket = new Socket(serverAddress, PORT);
                     out = new PrintWriter(socket.getOutputStream(), true);
 
@@ -102,15 +108,13 @@ public class Client {
         }).start();
     }
 
-    private String getServerAddress() {
+    private void storeIPAddress(String address) {
         Properties p = new Properties(System.getProperties());
+        p.setProperty("ip.address", address);
         try {
-            FileInputStream fis = new FileInputStream("system.properties");
-            p.load(fis);
-            return p.getProperty("ip.address");
+            FileOutputStream fos = new FileOutputStream("client.properties");
         } catch (Exception e) {
             e.printStackTrace();
-            return "localhost"; //default to local host if porperties file fails 
         }
     }
 
@@ -164,7 +168,6 @@ public class Client {
                 }
             } catch (IOException e) {
                 e.printStackTrace();
-                connectToServer(); // Reconnect if connection is lost
             }
         }
     }
